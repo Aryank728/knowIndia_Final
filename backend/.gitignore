@@ -50,4 +50,23 @@ typings/
 *.ntvs*
 *.njsproj
 *.sln
-*.sw? 
+*.sw?
+
+# Certificate files
+*.pem
+*.crt
+*.key
+*.cer
+cert_base64.txt
+temp.b64
+
+# Local database files
+*.sqlite
+*.db
+
+# Vercel
+.vercel/
+
+# Build artifacts
+dist/
+build/ 

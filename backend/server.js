@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const mysql = require('mysql2/promise');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -31,21 +33,119 @@ async function connectToDatabase() {
   try {
     console.log('Attempting to connect to database...');
     
-    // For Vercel serverless functions, create a new connection each time
-    // to avoid connection timeouts due to serverless cold starts
+    // For TiDB Cloud Serverless, we'll try multiple connection approaches
+    // in order of preference
+    
+    // 1. Look for PEM file in various locations
+    let ca = null;
+    const certLocations = [
+      path.join(__dirname, 'isrgrootx1.pem'),          // Local development
+      '/var/task/isrgrootx1.pem',                       // Vercel
+      '/var/task/backend/isrgrootx1.pem',               // Vercel with subfolder
+      path.join(process.cwd(), 'isrgrootx1.pem'),       // Alternative local path
+      path.join(process.cwd(), 'backend/isrgrootx1.pem') // Alternative subfolder
+    ];
+    
+    for (const certPath of certLocations) {
+      if (fs.existsSync(certPath)) {
+        try {
+          ca = fs.readFileSync(certPath);
+          console.log('Successfully loaded SSL certificate from:', certPath);
+          break;
+        } catch (certError) {
+          console.error(`Error reading certificate from ${certPath}:`, certError.message);
+        }
+      }
+    }
+    
+    // 2. If no PEM file found, try to use certificate from environment variable
+    if (!ca && process.env.DB_CA_CERT) {
+      try {
+        console.log('Using certificate from DB_CA_CERT environment variable');
+        ca = Buffer.from(process.env.DB_CA_CERT, 'base64');
+      } catch (envCertError) {
+        console.error('Error using certificate from environment variable:', envCertError.message);
+      }
+    }
+    
+    // 3. If still no certificate, try to connect without specifying CA
+    // TiDB Cloud may work with system CA certificates
+    
+    // Connection configuration
+    const sslConfig = process.env.DB_SSL === 'true' ? {
+      // Start with the most secure configuration
+      rejectUnauthorized: true,
+      // Only add CA if we found a certificate
+      ...(ca ? { ca } : {})
+    } : false;
+    
     const connectionConfig = {
       host: process.env.DB_HOST,
       port: parseInt(process.env.DB_PORT, 10),
       user: process.env.DB_USERNAME,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_DATABASE,
-      // Use a simpler SSL configuration for Vercel
-      ssl: process.env.DB_SSL ? {} : false
+      ssl: sslConfig,
+      // Additional options to help with connection stability
+      connectTimeout: 20000, // 20 seconds
+      waitForConnections: true,
+      connectionLimit: 10,
+      maxIdle: 10,
+      idleTimeout: 60000,
+      queueLimit: 0
     };
     
-    console.log('Connecting with config object...');
-    db = await mysql.createConnection(connectionConfig);
-    console.log('Connected successfully to database');
+    console.log('Connecting with config:', {
+      host: process.env.DB_HOST,
+      port: process.env.DB_PORT,
+      database: process.env.DB_DATABASE,
+      ssl: process.env.DB_SSL === 'true' ? 
+        `enabled with ${ca ? 'certificate' : 'system certs'}` : 
+        'disabled'
+    });
+    
+    try {
+      // Try to connect with the current configuration
+      db = await mysql.createConnection(connectionConfig);
+      console.log('Connected successfully to database with primary method');
+    } catch (primaryConnErr) {
+      console.error('Primary connection method failed:', primaryConnErr.message);
+      
+      // If that fails, try a more permissive SSL configuration
+      if (process.env.DB_SSL === 'true') {
+        console.log('Attempting alternative SSL connection method...');
+        const altConfig = {
+          ...connectionConfig,
+          ssl: {
+            // Sometimes less strict settings are needed
+            rejectUnauthorized: false
+          }
+        };
+        
+        try {
+          db = await mysql.createConnection(altConfig);
+          console.log('Connected successfully to database with alternative method');
+        } catch (altConnErr) {
+          console.error('Alternative connection method failed:', altConnErr.message);
+          
+          // Final attempt - try without SSL
+          console.log('Making final attempt without SSL...');
+          try {
+            const noSslConfig = {
+              ...connectionConfig,
+              ssl: false
+            };
+            db = await mysql.createConnection(noSslConfig);
+            console.log('Connected successfully to database without SSL');
+          } catch (noSslErr) {
+            console.error('All connection attempts failed. Last error:', noSslErr.message);
+            throw noSslErr;
+          }
+        }
+      } else {
+        throw primaryConnErr; // Re-throw to be caught by outer catch
+      }
+    }
     
     isConnected = true;
     

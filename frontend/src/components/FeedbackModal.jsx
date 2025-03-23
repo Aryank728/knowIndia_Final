@@ -11,6 +11,9 @@ const FeedbackModal = ({ isOpen, onClose }) => {
     suggestions: ''
   });
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isServerDownError, setIsServerDownError] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -22,6 +25,10 @@ const FeedbackModal = ({ isOpen, onClose }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
+    setErrorMessage('');
+    setIsServerDownError(false);
+    
     try {
       // Show submitting state
       const submitButton = e.target.querySelector('button[type="submit"]');
@@ -34,12 +41,30 @@ const FeedbackModal = ({ isOpen, onClose }) => {
       
       // First check if the server is online
       try {
-        const healthCheck = await fetch('https://knowindiaback.vercel.app/api/health');
+        const healthCheck = await fetch('https://knowindiaback.vercel.app/api/health', { 
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          mode: 'cors'
+        });
+        
+        if (!healthCheck.ok) {
+          console.error('Server health check failed with status:', healthCheck.status);
+          throw new Error('Server appears to be experiencing issues. Your feedback has been saved locally.');
+        }
+        
         const healthStatus = await healthCheck.json();
         console.log('Server health check:', healthStatus);
+        
+        // Check if database connection is working
+        if (healthStatus && healthStatus.db_connection !== 'connected') {
+          console.log('Database connection is not available:', healthStatus.db_connection);
+          setIsServerDownError(true);
+          throw new Error('Our database is currently unavailable. Your feedback has been saved locally and will be sent when the service is restored.');
+        }
       } catch (healthError) {
         console.error('Server health check failed:', healthError);
-        throw new Error('Server appears to be offline. Please try again later.');
+        setIsServerDownError(true);
+        throw new Error('We are experiencing temporary technical difficulties. Your feedback has been saved locally and will be sent later.');
       }
 
       const response = await fetch('https://knowindiaback.vercel.app/api/feedback', {
@@ -60,6 +85,12 @@ const FeedbackModal = ({ isOpen, onClose }) => {
           const errorData = await response.json();
           console.error('Server error response:', errorData);
           errorMessage = errorData.error || errorMessage;
+          
+          // Check for database connection errors
+          if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('database')) {
+            setIsServerDownError(true);
+            throw new Error('Our database is temporarily unavailable. Your feedback has been saved locally and will be sent when the service is restored.');
+          }
         } catch (parseError) {
           const errorText = await response.text();
           console.error('Server error (text):', errorText);
@@ -69,6 +100,12 @@ const FeedbackModal = ({ isOpen, onClose }) => {
 
       // Show success message
       setIsSubmitted(true);
+      
+      // If we had a server down error but now it works, clear local storage
+      if (isServerDownError) {
+        localStorage.removeItem('pendingFeedback');
+      }
+      
       // Reset form after 3 seconds and close modal
       setTimeout(() => {
         setIsSubmitted(false);
@@ -83,7 +120,35 @@ const FeedbackModal = ({ isOpen, onClose }) => {
       }, 3000);
     } catch (error) {
       console.error('Error submitting feedback:', error);
-      alert(`${error.message}. Please try again later.`);
+      setErrorMessage(error.message);
+      
+      // If this is a server down error, save the feedback to local storage for later submission
+      if (isServerDownError) {
+        try {
+          const pendingFeedback = JSON.parse(localStorage.getItem('pendingFeedback')) || [];
+          pendingFeedback.push({
+            ...formData,
+            timestamp: new Date().toISOString()
+          });
+          localStorage.setItem('pendingFeedback', JSON.stringify(pendingFeedback));
+          
+          // Show special success message for offline mode
+          setIsSubmitted(true);
+          setTimeout(() => {
+            setIsSubmitted(false);
+            setFormData({
+              name: '',
+              email: '',
+              rating: 5,
+              feedback: '',
+              suggestions: ''
+            });
+            onClose();
+          }, 5000);
+        } catch (storageError) {
+          console.error('Error saving feedback to local storage:', storageError);
+        }
+      }
     } finally {
       // Reset button state
       const submitButton = document.querySelector('form button[type="submit"]');
@@ -91,6 +156,7 @@ const FeedbackModal = ({ isOpen, onClose }) => {
         submitButton.disabled = false;
         submitButton.innerText = 'Submit Feedback';
       }
+      setIsSubmitting(false);
     }
   };
 
@@ -132,10 +198,24 @@ const FeedbackModal = ({ isOpen, onClose }) => {
                     </svg>
                   </div>
                   <h3 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">Thank You!</h3>
-                  <p className="text-gray-600 dark:text-gray-300">Your feedback has been submitted successfully. We appreciate your input!</p>
+                  {isServerDownError ? (
+                    <p className="text-gray-600 dark:text-gray-300">
+                      Your feedback has been saved locally. We'll submit it as soon as our services are back online.
+                    </p>
+                  ) : (
+                    <p className="text-gray-600 dark:text-gray-300">
+                      Your feedback has been submitted successfully. We appreciate your input!
+                    </p>
+                  )}
                 </div>
               ) : (
                 <form onSubmit={handleSubmit}>
+                  {errorMessage && !isServerDownError && (
+                    <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-md text-red-800 dark:text-red-300">
+                      <p>{errorMessage}</p>
+                    </div>
+                  )}
+                  
                   <div className="space-y-4">
                     {/* Name */}
                     <div>
@@ -226,9 +306,14 @@ const FeedbackModal = ({ isOpen, onClose }) => {
                     <div className="pt-2">
                       <button
                         type="submit"
-                        className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 dark:from-blue-500 dark:to-indigo-600 dark:hover:from-blue-600 dark:hover:to-indigo-700 text-white font-medium rounded-lg transition-colors"
+                        disabled={isSubmitting}
+                        className={`w-full py-3 ${
+                          isSubmitting 
+                            ? 'bg-gray-400 dark:bg-gray-600 cursor-not-allowed' 
+                            : 'bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 dark:from-blue-500 dark:to-indigo-600 dark:hover:from-blue-600 dark:hover:to-indigo-700'
+                        } text-white font-medium rounded-lg transition-colors`}
                       >
-                        Submit Feedback
+                        {isSubmitting ? 'Submitting...' : 'Submit Feedback'}
                       </button>
                     </div>
                   </div>

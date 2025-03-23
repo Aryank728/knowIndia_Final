@@ -21,7 +21,7 @@ app.options('*', cors());
 let db = null;
 let isConnected = false;
 
-// Connect to MySQL
+// Connect to MySQL - specialized for Vercel deployment
 async function connectToDatabase() {
   // If already connected, return the existing connection
   if (isConnected && db) {
@@ -29,14 +29,25 @@ async function connectToDatabase() {
   }
   
   try {
-    // Format connection string for TiDB Cloud
-    const connectionString = `mysql://${encodeURIComponent(process.env.DB_USERNAME)}:${encodeURIComponent(process.env.DB_PASSWORD)}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_DATABASE}`;
+    console.log('Attempting to connect to database...');
     
-    // Create the connection
-    db = await mysql.createConnection(connectionString + '?ssl={"rejectUnauthorized":true,"minVersion":"TLSv1.2"}');
+    // For Vercel serverless functions, create a new connection each time
+    // to avoid connection timeouts due to serverless cold starts
+    const connectionConfig = {
+      host: process.env.DB_HOST,
+      port: parseInt(process.env.DB_PORT, 10),
+      user: process.env.DB_USERNAME,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_DATABASE,
+      // Use a simpler SSL configuration for Vercel
+      ssl: process.env.DB_SSL ? {} : false
+    };
+    
+    console.log('Connecting with config object...');
+    db = await mysql.createConnection(connectionConfig);
+    console.log('Connected successfully to database');
+    
     isConnected = true;
-    
-    console.log('Connected to TiDB Cloud database');
     
     // Create feedback table if it doesn't exist
     const createTableQuery = `
@@ -58,16 +69,29 @@ async function connectToDatabase() {
     
     return db;
   } catch (err) {
-    console.error('Error connecting to database:', err);
+    console.error('Error connecting to database:', err.message);
+    console.error('Error stack:', err.stack);
+    console.error('Connection details:', {
+      host: process.env.DB_HOST,
+      port: process.env.DB_PORT,
+      database: process.env.DB_DATABASE,
+      username: process.env.DB_USERNAME ? 'provided' : 'missing'
+    });
     isConnected = false;
     throw err;
   }
 }
 
-// For local development
-if (process.env.NODE_ENV !== 'production') {
-  connectToDatabase().catch(console.error);
-}
+// Health check endpoint - no database connection needed
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    message: 'Server is running',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    db_connection: isConnected ? 'connected' : 'not connected'
+  });
+});
 
 // Feedback submission endpoint
 app.post('/api/feedback', async (req, res) => {
@@ -96,19 +120,48 @@ app.post('/api/feedback', async (req, res) => {
     const [results] = await connection.execute(query, [name, email, rating, feedback, suggestions]);
     console.log('Feedback stored successfully, ID:', results.insertId);
     
-    // Set CORS headers explicitly
-    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    // Return success response
     res.status(201).json({ message: 'Feedback submitted successfully', id: results.insertId });
   } catch (err) {
     console.error('Error submitting feedback:', err.message);
     console.error('Error stack:', err.stack);
     
-    // Set CORS headers even for error responses
-    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.status(500).json({ error: 'Error submitting feedback: ' + err.message });
   }
+});
+
+// Database test endpoint
+app.get('/api/db-test', async (req, res) => {
+  try {
+    console.log('Testing database connection...');
+    const connection = await connectToDatabase();
+    
+    // Run a test query
+    const [results] = await connection.execute('SELECT 1 as connected');
+    
+    console.log('Database test query results:', results);
+    
+    res.status(200).json({
+      status: 'ok',
+      message: 'Database connection successful',
+      connected: true,
+      test_result: results
+    });
+  } catch (err) {
+    console.error('Database test error:', err.message);
+    console.error('Error stack:', err.stack);
+    
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to connect to database',
+      error: err.message
+    });
+  }
+});
+
+// Simple test endpoint
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'Backend server is working!' });
 });
 
 // For local development

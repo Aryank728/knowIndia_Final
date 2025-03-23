@@ -23,23 +23,48 @@ const FeedbackModal = ({ isOpen, onClose }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Show submitting state
+      const submitButton = e.target.querySelector('button[type="submit"]');
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.innerText = 'Submitting...';
+      }
+
+      console.log('Sending feedback data:', formData);
+      
+      // First check if the server is online
+      try {
+        const healthCheck = await fetch('https://knowindiaback.vercel.app/api/health');
+        const healthStatus = await healthCheck.json();
+        console.log('Server health check:', healthStatus);
+      } catch (healthError) {
+        console.error('Server health check failed:', healthError);
+        throw new Error('Server appears to be offline. Please try again later.');
+      }
+
       const response = await fetch('https://knowindiaback.vercel.app/api/feedback', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(formData),
-        mode: 'cors',
-        credentials: 'same-origin'
+        mode: 'cors'
       });
 
       // Log the full response for debugging
       console.log('Response status:', response.status);
       
       if (!response.ok) {
-        const errorData = await response.text();
-        console.error('Server error response:', errorData);
-        throw new Error(`Failed to submit feedback: ${response.status}`);
+        let errorMessage = `Error: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          console.error('Server error response:', errorData);
+          errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+          const errorText = await response.text();
+          console.error('Server error (text):', errorText);
+        }
+        throw new Error(`Failed to submit feedback: ${errorMessage}`);
       }
 
       // Show success message
@@ -58,7 +83,14 @@ const FeedbackModal = ({ isOpen, onClose }) => {
       }, 3000);
     } catch (error) {
       console.error('Error submitting feedback:', error);
-      alert('Failed to submit feedback. Please try again later.');
+      alert(`${error.message}. Please try again later.`);
+    } finally {
+      // Reset button state
+      const submitButton = document.querySelector('form button[type="submit"]');
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.innerText = 'Submit Feedback';
+      }
     }
   };
 

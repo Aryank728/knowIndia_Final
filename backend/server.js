@@ -39,11 +39,16 @@ async function connectToDatabase() {
     // 1. Look for PEM file in various locations
     let ca = null;
     const certLocations = [
-      path.join(__dirname, 'isrgrootx1.pem'),          // Local development
-      '/var/task/isrgrootx1.pem',                       // Vercel
-      '/var/task/backend/isrgrootx1.pem',               // Vercel with subfolder
-      path.join(process.cwd(), 'isrgrootx1.pem'),       // Alternative local path
-      path.join(process.cwd(), 'backend/isrgrootx1.pem') // Alternative subfolder
+      path.join(__dirname, 'certs', 'isrgrootx1.pem'),    // Certs directory (preferred)
+      path.join(__dirname, 'isrgrootx1.pem'),             // Local development
+      '/var/task/certs/isrgrootx1.pem',                   // Vercel with certs dir
+      '/var/task/isrgrootx1.pem',                         // Vercel
+      '/var/task/backend/isrgrootx1.pem',                 // Vercel with subfolder
+      '/var/task/backend/certs/isrgrootx1.pem',           // Vercel with backend/certs
+      path.join(process.cwd(), 'certs', 'isrgrootx1.pem'), // Alternative with certs dir
+      path.join(process.cwd(), 'isrgrootx1.pem'),          // Alternative local path
+      path.join(process.cwd(), 'backend/isrgrootx1.pem'),  // Alternative subfolder
+      path.join(process.cwd(), 'backend/certs/isrgrootx1.pem') // Alternative with backend/certs
     ];
     
     for (const certPath of certLocations) {

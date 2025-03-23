@@ -52,11 +52,15 @@ typings/
 *.sln
 *.sw?
 
-# Certificate files
-*.pem
-*.crt
-*.key
-*.cer
+# Certificate files (except those in certs directory)
+/*.pem
+/*.crt
+/*.key
+/*.cer
+!/certs/**/*.pem
+!/certs/**/*.crt
+!/certs/**/*.key
+!/certs/**/*.cer
 cert_base64.txt
 temp.b64
 

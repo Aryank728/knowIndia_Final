@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "vercel-build": "echo Vercel build completed"
+    "vercel-build": "node deploy-test.js && echo Vercel build completed",
+    "test-cert": "node deploy-test.js",
+    "predeploy": "node deploy-test.js"
   },
   "engines": {
     "node": ">=14.0.0"

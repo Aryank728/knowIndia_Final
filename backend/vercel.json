@@ -14,7 +14,7 @@
   ],
   "functions": {
     "server.js": {
-      "includeFiles": "**/*.pem"
+      "includeFiles": ["**/*.pem", "certs/**"]
     }
   }
 } 

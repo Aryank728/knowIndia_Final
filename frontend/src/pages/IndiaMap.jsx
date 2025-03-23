@@ -49,7 +49,7 @@ const IndiaMapComponent = () => {
       // Fallback to original states list
       setStatesList(states);
     }
-  }, []);
+  }, [states]);
 
   // Original states list as fallback
   const states = {

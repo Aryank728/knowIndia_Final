@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+yarn.lock
+package-lock.json
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Build directories
+dist/
+build/
+
+# Debug logs
+logs/
+*.log
+
+# Coverage and test reports
+coverage/
+.nyc_output/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Vercel specific
+.vercel/
+
+# Custom backup files
+*.backup
+*.bak
+
+# Local temporary files
+/tmp/
+/fallback_data/
+
+# Database files
+*.sqlite
+*.sqlite3 

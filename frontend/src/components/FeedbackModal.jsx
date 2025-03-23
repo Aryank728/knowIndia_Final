@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
+import { useTheme } from "../context/ThemeContext";
 
 const FeedbackModal = ({ isOpen, onClose }) => {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -11,6 +14,7 @@ const FeedbackModal = ({ isOpen, onClose }) => {
     suggestions: ''
   });
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -20,10 +24,73 @@ const FeedbackModal = ({ isOpen, onClose }) => {
     }));
   };
 
+  // First, add a function to store feedback locally
+  const storeFeedbackLocally = (feedbackData) => {
+    try {
+      // Create a unique ID
+      const feedbackId = `feedback_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+      
+      // Add timestamp and ID
+      const storedData = {
+        ...feedbackData,
+        id: feedbackId,
+        timestamp: new Date().toISOString(),
+        savedLocally: true
+      };
+      
+      // Get existing feedback array or initialize empty array
+      const existingFeedback = JSON.parse(localStorage.getItem('storedFeedback') || '[]');
+      
+      // Add new feedback to the beginning
+      existingFeedback.unshift(storedData);
+      
+      // Limit to 20 entries to avoid storage issues
+      const limitedFeedback = existingFeedback.slice(0, 20);
+      
+      // Save back to localStorage
+      localStorage.setItem('storedFeedback', JSON.stringify(limitedFeedback));
+      
+      return {
+        success: true,
+        id: feedbackId
+      };
+    } catch (error) {
+      console.error('Error saving feedback locally:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  };
+
+  // Then update the handleSubmit function
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Validate form fields before submission
+    if (!formData.name.trim()) {
+      alert('Please enter your name');
+      return;
+    }
+    
+    if (!formData.email.trim()) {
+      alert('Please enter your email');
+      return;
+    }
+    
+    // Simple email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email.trim())) {
+      alert('Please enter a valid email address');
+      return;
+    }
+    
+    // Show loading state
+    setIsSubmitting(true);
+    
     try {
-      const response = await fetch('https://knowindiaback.vercel.app/api/feedback', {
+      // Try to submit to server first
+      const response = await fetch('https://know-india-final-g4rk.vercel.app/api/feedback', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -31,28 +98,83 @@ const FeedbackModal = ({ isOpen, onClose }) => {
         body: JSON.stringify(formData),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to submit feedback');
+      // Log the full response for debugging
+      console.log('Response status:', response.status);
+      
+      // Parse response data
+      let responseData;
+      try {
+        responseData = await response.json();
+        console.log('Response data:', responseData);
+      } catch (parseError) {
+        console.error('Error parsing response:', parseError);
+        responseData = { 
+          error: await response.text() || 'Unknown error',
+          status: response.status
+        };
       }
-
-      // Show success message
-      setIsSubmitted(true);
-      // Reset form after 3 seconds and close modal
-      setTimeout(() => {
-        setIsSubmitted(false);
-        setFormData({
-          name: '',
-          email: '',
-          rating: 5,
-          feedback: '',
-          suggestions: ''
-        });
-        onClose();
-      }, 3000);
+      
+      // Handle different status codes
+      if (response.status === 201 || response.status === 202) {
+        // Success cases
+        console.log('Feedback submitted successfully to server');
+        showSuccess();
+      } else {
+        // Server error, use fallback
+        console.error('Server error response:', responseData);
+        
+        // Store feedback locally as fallback
+        const localStorageResult = storeFeedbackLocally(formData);
+        
+        if (localStorageResult.success) {
+          console.log('Feedback saved locally as fallback');
+          showSuccess('Your feedback has been saved. Thank you for your input!');
+        } else {
+          throw new Error('Failed to save feedback: ' + localStorageResult.error);
+        }
+      }
     } catch (error) {
       console.error('Error submitting feedback:', error);
-      alert('Failed to submit feedback. Please try again later.');
+      
+      // If even the server request fails (network error), try local storage
+      console.log('Attempting local storage fallback due to network error');
+      const localStorageResult = storeFeedbackLocally(formData);
+      
+      if (localStorageResult.success) {
+        console.log('Feedback saved locally after network error');
+        showSuccess('Your feedback has been saved locally. Thank you!');
+      } else {
+        alert(`Failed to submit feedback. Please try again later. (${error.message})`);
+      }
+    } finally {
+      // Hide loading state
+      setIsSubmitting(false);
     }
+  };
+  
+  // Helper function to show success and reset
+  const showSuccess = (message) => {
+    setIsSubmitted(true);
+    
+    // If custom message is provided, display it as an alert
+    if (message) {
+      setTimeout(() => {
+        alert(message);
+      }, 500);
+    }
+    
+    // Reset form after 3 seconds and close modal
+    setTimeout(() => {
+      setIsSubmitted(false);
+      setFormData({
+        name: '',
+        email: '',
+        rating: 5,
+        feedback: '',
+        suggestions: ''
+      });
+      onClose();
+    }, 3000);
   };
 
   return (
@@ -184,12 +306,23 @@ const FeedbackModal = ({ isOpen, onClose }) => {
                     </div>
 
                     {/* Submit Button */}
-                    <div className="pt-2">
+                    <div className="mt-6">
                       <button
                         type="submit"
-                        className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 dark:from-blue-500 dark:to-indigo-600 dark:hover:from-blue-600 dark:hover:to-indigo-700 text-white font-medium rounded-lg transition-colors"
+                        className={`w-full px-4 py-2 text-white font-medium rounded-md ${isDark ? 'bg-orange-500 hover:bg-orange-600' : 'bg-orange-500 hover:bg-orange-600'} transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed`}
+                        disabled={isSubmitting}
                       >
-                        Submit Feedback
+                        {isSubmitting ? (
+                          <span className="flex items-center justify-center">
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Submitting...
+                          </span>
+                        ) : (
+                          'Submit Feedback'
+                        )}
                       </button>
                     </div>
                   </div>

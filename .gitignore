@@ -35,6 +35,10 @@ node_modules/
 cert_base64.txt
 temp.b64
 
+# Mock data files
+backend/feedback-data/
+*/feedback-data/
+
 # Misc
 .DS_Store
 .vercel

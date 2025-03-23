@@ -33,146 +33,118 @@ async function connectToDatabase() {
   try {
     console.log('Attempting to connect to database...');
     
-    // For TiDB Cloud Serverless, we'll try multiple connection approaches
-    // in order of preference
-    
-    // 1. Look for PEM file in various locations
-    let ca = null;
-    const certLocations = [
-      path.join(__dirname, 'certs', 'isrgrootx1.pem'),    // Certs directory (preferred)
-      path.join(__dirname, 'isrgrootx1.pem'),             // Local development
-      '/var/task/certs/isrgrootx1.pem',                   // Vercel with certs dir
-      '/var/task/isrgrootx1.pem',                         // Vercel
-      '/var/task/backend/isrgrootx1.pem',                 // Vercel with subfolder
-      '/var/task/backend/certs/isrgrootx1.pem',           // Vercel with backend/certs
-      path.join(process.cwd(), 'certs', 'isrgrootx1.pem'), // Alternative with certs dir
-      path.join(process.cwd(), 'isrgrootx1.pem'),          // Alternative local path
-      path.join(process.cwd(), 'backend/isrgrootx1.pem'),  // Alternative subfolder
-      path.join(process.cwd(), 'backend/certs/isrgrootx1.pem') // Alternative with backend/certs
+    // For development and troubleshooting, try different connection methods
+    const connectionMethods = [
+      // Method 1: Simple connection without SSL (fastest for testing)
+      async () => {
+        console.log('Trying connection without SSL...');
+        return mysql.createConnection({
+          host: process.env.DB_HOST,
+          port: parseInt(process.env.DB_PORT, 10),
+          user: process.env.DB_USERNAME,
+          password: process.env.DB_PASSWORD,
+          database: process.env.DB_DATABASE,
+          ssl: false,
+          connectTimeout: 20000
+        });
+      },
+      
+      // Method 2: Connection with relaxed SSL settings
+      async () => {
+        console.log('Trying connection with relaxed SSL...');
+        return mysql.createConnection({
+          host: process.env.DB_HOST,
+          port: parseInt(process.env.DB_PORT, 10),
+          user: process.env.DB_USERNAME,
+          password: process.env.DB_PASSWORD,
+          database: process.env.DB_DATABASE,
+          ssl: { rejectUnauthorized: false },
+          connectTimeout: 20000
+        });
+      },
+      
+      // Method 3: Full certificate-based connection
+      async () => {
+        console.log('Trying connection with full SSL certificate validation...');
+        
+        // Try to find a certificate
+        let ca = null;
+        try {
+          // Check for certificate in multiple locations
+          const certLocations = [
+            path.join(__dirname, 'certs', 'isrgrootx1.pem'),
+            path.join(__dirname, 'isrgrootx1.pem'),
+            '/var/task/certs/isrgrootx1.pem',
+            '/var/task/isrgrootx1.pem'
+          ];
+          
+          for (const certPath of certLocations) {
+            if (fs.existsSync(certPath)) {
+              ca = fs.readFileSync(certPath);
+              console.log(`Using certificate from: ${certPath}`);
+              break;
+            }
+          }
+          
+          // If no file found, try environment variable
+          if (!ca && process.env.DB_CA_CERT) {
+            ca = Buffer.from(process.env.DB_CA_CERT, 'base64');
+            console.log('Using certificate from environment variable');
+          }
+        } catch (certError) {
+          console.error('Error loading certificate:', certError.message);
+        }
+        
+        return mysql.createConnection({
+          host: process.env.DB_HOST,
+          port: parseInt(process.env.DB_PORT, 10),
+          user: process.env.DB_USERNAME,
+          password: process.env.DB_PASSWORD,
+          database: process.env.DB_DATABASE,
+          ssl: ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: true },
+          connectTimeout: 20000
+        });
+      }
     ];
     
-    for (const certPath of certLocations) {
-      if (fs.existsSync(certPath)) {
-        try {
-          ca = fs.readFileSync(certPath);
-          console.log('Successfully loaded SSL certificate from:', certPath);
-          break;
-        } catch (certError) {
-          console.error(`Error reading certificate from ${certPath}:`, certError.message);
-        }
-      }
-    }
+    // Try each connection method in sequence
+    let lastError = null;
     
-    // 2. If no PEM file found, try to use certificate from environment variable
-    if (!ca && process.env.DB_CA_CERT) {
+    for (const method of connectionMethods) {
       try {
-        console.log('Using certificate from DB_CA_CERT environment variable');
-        ca = Buffer.from(process.env.DB_CA_CERT, 'base64');
-      } catch (envCertError) {
-        console.error('Error using certificate from environment variable:', envCertError.message);
-      }
-    }
-    
-    // 3. If still no certificate, try to connect without specifying CA
-    // TiDB Cloud may work with system CA certificates
-    
-    // Connection configuration
-    const sslConfig = process.env.DB_SSL === 'true' ? {
-      // Start with the most secure configuration
-      rejectUnauthorized: true,
-      // Only add CA if we found a certificate
-      ...(ca ? { ca } : {})
-    } : false;
-    
-    const connectionConfig = {
-      host: process.env.DB_HOST,
-      port: parseInt(process.env.DB_PORT, 10),
-      user: process.env.DB_USERNAME,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_DATABASE,
-      ssl: sslConfig,
-      // Additional options to help with connection stability
-      connectTimeout: 20000, // 20 seconds
-      waitForConnections: true,
-      connectionLimit: 10,
-      maxIdle: 10,
-      idleTimeout: 60000,
-      queueLimit: 0
-    };
-    
-    console.log('Connecting with config:', {
-      host: process.env.DB_HOST,
-      port: process.env.DB_PORT,
-      database: process.env.DB_DATABASE,
-      ssl: process.env.DB_SSL === 'true' ? 
-        `enabled with ${ca ? 'certificate' : 'system certs'}` : 
-        'disabled'
-    });
-    
-    try {
-      // Try to connect with the current configuration
-      db = await mysql.createConnection(connectionConfig);
-      console.log('Connected successfully to database with primary method');
-    } catch (primaryConnErr) {
-      console.error('Primary connection method failed:', primaryConnErr.message);
-      
-      // If that fails, try a more permissive SSL configuration
-      if (process.env.DB_SSL === 'true') {
-        console.log('Attempting alternative SSL connection method...');
-        const altConfig = {
-          ...connectionConfig,
-          ssl: {
-            // Sometimes less strict settings are needed
-            rejectUnauthorized: false
-          }
-        };
+        db = await method();
+        console.log('Connection successful!');
+        isConnected = true;
         
-        try {
-          db = await mysql.createConnection(altConfig);
-          console.log('Connected successfully to database with alternative method');
-        } catch (altConnErr) {
-          console.error('Alternative connection method failed:', altConnErr.message);
-          
-          // Final attempt - try without SSL
-          console.log('Making final attempt without SSL...');
-          try {
-            const noSslConfig = {
-              ...connectionConfig,
-              ssl: false
-            };
-            db = await mysql.createConnection(noSslConfig);
-            console.log('Connected successfully to database without SSL');
-          } catch (noSslErr) {
-            console.error('All connection attempts failed. Last error:', noSslErr.message);
-            throw noSslErr;
-          }
-        }
-      } else {
-        throw primaryConnErr; // Re-throw to be caught by outer catch
+        // Create feedback table if it doesn't exist
+        const createTableQuery = `
+          CREATE TABLE IF NOT EXISTS Feedback (
+            feedback_id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            email VARCHAR(100) NOT NULL,
+            rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+            liked_content TEXT,
+            improvement_suggestions TEXT,
+            place_id INT,
+            status ENUM('new', 'read', 'responded') DEFAULT 'new',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `;
+        
+        await db.execute(createTableQuery);
+        console.log('Feedback table ready');
+        
+        return db;
+      } catch (err) {
+        console.error('Connection attempt failed:', err.message);
+        lastError = err;
+        // Continue to next method
       }
     }
     
-    isConnected = true;
+    // If we get here, all methods failed
+    throw lastError || new Error('All connection methods failed');
     
-    // Create feedback table if it doesn't exist
-    const createTableQuery = `
-      CREATE TABLE IF NOT EXISTS Feedback (
-        feedback_id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
-        email VARCHAR(100) NOT NULL,
-        rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
-        liked_content TEXT,
-        improvement_suggestions TEXT,
-        place_id INT,
-        status ENUM('new', 'read', 'responded') DEFAULT 'new',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
-    
-    await db.execute(createTableQuery);
-    console.log('Feedback table ready');
-    
-    return db;
   } catch (err) {
     console.error('Error connecting to database:', err.message);
     console.error('Error stack:', err.stack);
@@ -267,6 +239,160 @@ app.get('/api/db-test', async (req, res) => {
 // Simple test endpoint
 app.get('/api/test', (req, res) => {
   res.json({ message: 'Backend server is working!' });
+});
+
+// Debug endpoint that doesn't require database connection
+app.get('/api/debug', (req, res) => {
+  const debug = {
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    nodejs_version: process.version,
+    env_vars: {
+      db_host: process.env.DB_HOST ? 'set' : 'not set',
+      db_port: process.env.DB_PORT ? 'set' : 'not set',
+      db_username: process.env.DB_USERNAME ? 'set' : 'not set',
+      db_password: process.env.DB_PASSWORD ? 'set' : 'not set',
+      db_database: process.env.DB_DATABASE ? 'set' : 'not set',
+      db_ssl: process.env.DB_SSL ? 'set' : 'not set',
+      db_ca_cert: process.env.DB_CA_CERT ? 'set' : 'not set'
+    },
+    certificate_search: {
+      certs_dir_exists: fs.existsSync(path.join(__dirname, 'certs')),
+      root_cert_exists: fs.existsSync(path.join(__dirname, 'isrgrootx1.pem')),
+      certs_dir_cert_exists: fs.existsSync(path.join(__dirname, 'certs', 'isrgrootx1.pem'))
+    },
+    headers: req.headers,
+    dir_contents: fs.existsSync(__dirname) ? fs.readdirSync(__dirname) : 'unavailable'
+  };
+  
+  res.json(debug);
+});
+
+// Add a mock feedback endpoint that doesn't require database connection
+app.post('/api/feedback-mock', (req, res) => {
+  try {
+    console.log('Received mock feedback submission:', req.body);
+    
+    // Validate required fields
+    const { name, email, rating, feedback, suggestions } = req.body;
+    
+    if (!name || !email || !rating) {
+      console.error('Missing required fields:', { name: !!name, email: !!email, rating: !!rating });
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    // Generate a fake ID
+    const fakeId = Math.floor(Math.random() * 10000);
+    
+    // Store in file system as fallback
+    try {
+      const feedbackData = {
+        id: fakeId,
+        name,
+        email,
+        rating,
+        feedback,
+        suggestions,
+        timestamp: new Date().toISOString()
+      };
+      
+      const feedbackDir = path.join(__dirname, 'feedback-data');
+      if (!fs.existsSync(feedbackDir)) {
+        fs.mkdirSync(feedbackDir, { recursive: true });
+      }
+      
+      fs.writeFileSync(
+        path.join(feedbackDir, `feedback-${fakeId}.json`),
+        JSON.stringify(feedbackData, null, 2)
+      );
+      
+      console.log(`Saved mock feedback to file system with ID: ${fakeId}`);
+    } catch (fileErr) {
+      console.error('Error saving mock feedback to file:', fileErr);
+    }
+    
+    // Return success response
+    res.status(201).json({ 
+      message: 'Feedback submitted successfully (MOCK)',
+      id: fakeId,
+      note: 'This is a mock submission that doesn\'t use the database'
+    });
+  } catch (err) {
+    console.error('Error in mock feedback submission:', err.message);
+    res.status(500).json({ error: 'Error in mock feedback: ' + err.message });
+  }
+});
+
+// Add a GET endpoint to retrieve all mock feedback submissions
+app.get('/api/feedback-mock', (req, res) => {
+  try {
+    const feedbackDir = path.join(__dirname, 'feedback-data');
+    
+    // If directory doesn't exist, return empty array
+    if (!fs.existsSync(feedbackDir)) {
+      return res.status(200).json({ 
+        feedbacks: [],
+        message: 'No feedback data found'
+      });
+    }
+    
+    // Read all files in the directory
+    const files = fs.readdirSync(feedbackDir).filter(file => file.startsWith('feedback-') && file.endsWith('.json'));
+    const feedbacks = [];
+    
+    for (const file of files) {
+      try {
+        const content = fs.readFileSync(path.join(feedbackDir, file), 'utf8');
+        const data = JSON.parse(content);
+        feedbacks.push(data);
+      } catch (err) {
+        console.error(`Error reading feedback file ${file}:`, err);
+      }
+    }
+    
+    // Sort by timestamp descending (newest first)
+    feedbacks.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    res.status(200).json({ 
+      feedbacks, 
+      count: feedbacks.length,
+      message: 'Mock feedback data retrieved successfully'
+    });
+  } catch (err) {
+    console.error('Error retrieving mock feedback data:', err);
+    res.status(500).json({ error: 'Error retrieving mock feedback: ' + err.message });
+  }
+});
+
+// Add a GET endpoint to retrieve a specific mock feedback by ID
+app.get('/api/feedback-mock/:id', (req, res) => {
+  try {
+    const feedbackId = req.params.id;
+    const feedbackDir = path.join(__dirname, 'feedback-data');
+    const filePath = path.join(feedbackDir, `feedback-${feedbackId}.json`);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ 
+        error: `No feedback found with ID: ${feedbackId}`
+      });
+    }
+    
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      const data = JSON.parse(content);
+      
+      res.status(200).json({ 
+        feedback: data,
+        message: 'Mock feedback retrieved successfully'
+      });
+    } catch (err) {
+      console.error(`Error reading feedback file for ID ${feedbackId}:`, err);
+      res.status(500).json({ error: `Error reading feedback data: ${err.message}` });
+    }
+  } catch (err) {
+    console.error('Error retrieving specific mock feedback:', err);
+    res.status(500).json({ error: 'Error retrieving specific mock feedback: ' + err.message });
+  }
 });
 
 // For local development

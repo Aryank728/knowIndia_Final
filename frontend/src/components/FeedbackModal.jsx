@@ -29,10 +29,17 @@ const FeedbackModal = ({ isOpen, onClose }) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(formData),
+        mode: 'cors',
+        credentials: 'same-origin'
       });
 
+      // Log the full response for debugging
+      console.log('Response status:', response.status);
+      
       if (!response.ok) {
-        throw new Error('Failed to submit feedback');
+        const errorData = await response.text();
+        console.error('Server error response:', errorData);
+        throw new Error(`Failed to submit feedback: ${response.status}`);
       }
 
       // Show success message

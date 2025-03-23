@@ -8,11 +8,15 @@ const port = process.env.PORT || 5000;
 
 // Middleware with CORS configured for production
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://know-india-frontend.vercel.app'],
-  methods: ['GET', 'POST'],
-  credentials: true
+  origin: ['http://localhost:3000', 'https://know-india-frontend.vercel.app', 'https://knowindia.vercel.app'],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
+
+// Add explicit handling for preflight requests
+app.options('*', cors());
 
 let db = null;
 let isConnected = false;
@@ -68,19 +72,42 @@ if (process.env.NODE_ENV !== 'production') {
 // Feedback submission endpoint
 app.post('/api/feedback', async (req, res) => {
   try {
-    const connection = await connectToDatabase();
+    console.log('Received feedback submission request');
+    
+    // Validate required fields
     const { name, email, rating, feedback, suggestions } = req.body;
+    
+    if (!name || !email || !rating) {
+      console.error('Missing required fields:', { name: !!name, email: !!email, rating: !!rating });
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    // Connect to database
+    console.log('Connecting to database...');
+    const connection = await connectToDatabase();
+    console.log('Database connection successful');
     
     const query = `
       INSERT INTO Feedback (name, email, rating, liked_content, improvement_suggestions)
       VALUES (?, ?, ?, ?, ?)
     `;
     
+    console.log('Executing database query...');
     const [results] = await connection.execute(query, [name, email, rating, feedback, suggestions]);
+    console.log('Feedback stored successfully, ID:', results.insertId);
+    
+    // Set CORS headers explicitly
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.status(201).json({ message: 'Feedback submitted successfully', id: results.insertId });
   } catch (err) {
-    console.error('Error submitting feedback:', err);
-    res.status(500).json({ error: 'Error submitting feedback' });
+    console.error('Error submitting feedback:', err.message);
+    console.error('Error stack:', err.stack);
+    
+    // Set CORS headers even for error responses
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.status(500).json({ error: 'Error submitting feedback: ' + err.message });
   }
 });
 

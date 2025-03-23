@@ -7,6 +7,48 @@ import { useTheme } from "../context/ThemeContext";
 import { states as knowIndiaStates, uts as knowIndiaUTs } from 'knowindia';
 import { convertMapCodeToKnowIndia } from "../utils/stateCodeMapping";
 
+
+ // Original states list as fallback
+ const states = {
+  'AN': 'Andaman and Nicobar Islands',
+  'AP': 'Andhra Pradesh',
+  'AR': 'Arunachal Pradesh',
+  'AS': 'Assam',
+  'BR': 'Bihar',
+  'CH': 'Chandigarh',
+  'CT': 'Chhattisgarh',
+  'DD': 'Dadra and Nagar Haveli',
+  'DL': 'Delhi',
+  'DN': 'Daman and Diu',
+  'GA': 'Goa',
+  'GJ': 'Gujarat',
+  'HP': 'Himachal Pradesh',
+  'HR': 'Haryana',
+  'JH': 'Jharkhand',
+  'JK': 'Jammu and Kashmir',
+  'KA': 'Karnataka',
+  'KL': 'Kerala',
+  'LA': 'Ladakh',
+  'LD': 'Lakshadweep',
+  'MH': 'Maharashtra',
+  'ML': 'Meghalaya',
+  'MN': 'Manipur',
+  'MP': 'Madhya Pradesh',
+  'MZ': 'Mizoram',
+  'NL': 'Nagaland',
+  'OR': 'Odisha',
+  'PB': 'Punjab',
+  'PY': 'Puducherry',
+  'RJ': 'Rajasthan',
+  'SK': 'Sikkim',
+  'TG': 'Telangana',
+  'TN': 'Tamil Nadu',
+  'TR': 'Tripura',
+  'UP': 'Uttar Pradesh',
+  'UT': 'Uttarakhand',
+  'WB': 'West Bengal'
+};
+
 const IndiaMapComponent = () => {
   const [selectedState, setSelectedState] = useState("");
   const [statesList, setStatesList] = useState({});
@@ -51,46 +93,6 @@ const IndiaMapComponent = () => {
     }
   }, []);
 
-  // Original states list as fallback
-  const states = {
-    'AN': 'Andaman and Nicobar Islands',
-    'AP': 'Andhra Pradesh',
-    'AR': 'Arunachal Pradesh',
-    'AS': 'Assam',
-    'BR': 'Bihar',
-    'CH': 'Chandigarh',
-    'CT': 'Chhattisgarh',
-    'DD': 'Dadra and Nagar Haveli',
-    'DL': 'Delhi',
-    'DN': 'Daman and Diu',
-    'GA': 'Goa',
-    'GJ': 'Gujarat',
-    'HP': 'Himachal Pradesh',
-    'HR': 'Haryana',
-    'JH': 'Jharkhand',
-    'JK': 'Jammu and Kashmir',
-    'KA': 'Karnataka',
-    'KL': 'Kerala',
-    'LA': 'Ladakh',
-    'LD': 'Lakshadweep',
-    'MH': 'Maharashtra',
-    'ML': 'Meghalaya',
-    'MN': 'Manipur',
-    'MP': 'Madhya Pradesh',
-    'MZ': 'Mizoram',
-    'NL': 'Nagaland',
-    'OR': 'Odisha',
-    'PB': 'Punjab',
-    'PY': 'Puducherry',
-    'RJ': 'Rajasthan',
-    'SK': 'Sikkim',
-    'TG': 'Telangana',
-    'TN': 'Tamil Nadu',
-    'TR': 'Tripura',
-    'UP': 'Uttar Pradesh',
-    'UT': 'Uttarakhand',
-    'WB': 'West Bengal'
-  };
 
   const handleClick = (stateCode) => {
     console.log("IndiaMap - stateCode clicked:", stateCode);

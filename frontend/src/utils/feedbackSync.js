@@ -29,6 +29,7 @@ export const syncPendingFeedback = async () => {
 
     // Check if the server is online and database is connected
     try {
+      console.log('Checking server and database health...');
       const healthCheck = await fetch('https://knowindiaback.vercel.app/api/health', {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
@@ -42,10 +43,33 @@ export const syncPendingFeedback = async () => {
       }
       
       const healthStatus = await healthCheck.json();
+      console.log('Server health status:', healthStatus);
       
       if (healthStatus.db_connection !== 'connected') {
         console.error('Database is still not connected, aborting sync');
         result.errors.push('Database not connected');
+        return result;
+      }
+      
+      // Double-check with a database test endpoint
+      const dbTest = await fetch('https://knowindiaback.vercel.app/api/db-test', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        mode: 'cors'
+      });
+      
+      if (!dbTest.ok) {
+        console.error('Database test failed, aborting sync');
+        result.errors.push('Database test failed');
+        return result;
+      }
+      
+      const dbStatus = await dbTest.json();
+      console.log('Database test status:', dbStatus);
+      
+      if (!dbStatus.connected) {
+        console.error('Database test indicates database is not connected, aborting sync');
+        result.errors.push('Database test indicates not connected');
         return result;
       }
     } catch (healthError) {
@@ -63,6 +87,8 @@ export const syncPendingFeedback = async () => {
         // Remove the timestamp field before sending
         const { timestamp, ...feedbackData } = feedback;
         
+        console.log(`Syncing item ${i+1}/${pendingFeedback.length}:`, feedbackData);
+        
         const response = await fetch('https://knowindiaback.vercel.app/api/feedback', {
           method: 'POST',
           headers: {
@@ -73,18 +99,27 @@ export const syncPendingFeedback = async () => {
         });
 
         if (response.ok) {
+          const responseData = await response.json();
+          console.log(`Successfully synced item ${i+1}, server response:`, responseData);
           // Successfully submitted this feedback
           successfullySubmitted.push(i);
           result.synced++;
         } else {
           // Failed to submit this feedback
           result.failed++;
-          const errorData = await response.json();
-          result.errors.push(`Failed to sync item ${i+1}: ${errorData.error || response.status}`);
+          try {
+            const errorData = await response.json();
+            console.error(`Failed to sync item ${i+1}:`, errorData);
+            result.errors.push(`Failed to sync item ${i+1}: ${errorData.error || response.status}`);
+          } catch (e) {
+            console.error(`Failed to parse error response for item ${i+1}:`, e);
+            result.errors.push(`Failed to sync item ${i+1}: ${response.status}`);
+          }
         }
       } catch (error) {
         // Error submitting this feedback
         result.failed++;
+        console.error(`Error syncing item ${i+1}:`, error);
         result.errors.push(`Error syncing item ${i+1}: ${error.message}`);
       }
     }
@@ -95,8 +130,10 @@ export const syncPendingFeedback = async () => {
       
       if (remainingFeedback.length > 0) {
         localStorage.setItem('pendingFeedback', JSON.stringify(remainingFeedback));
+        console.log(`Updated local storage: ${remainingFeedback.length} items remaining`);
       } else {
         localStorage.removeItem('pendingFeedback');
+        console.log('All feedback synced, cleared local storage');
       }
       
       console.log(`Synced ${successfullySubmitted.length} feedback items, ${remainingFeedback.length} remaining`);

@@ -25,9 +25,16 @@ const FeedbackModal = ({ isOpen, onClose }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Prevent multiple submissions
+    if (isSubmitting) {
+      console.log('Form is already submitting, ignoring click');
+      return;
+    }
+    
     setIsSubmitting(true);
     setErrorMessage('');
-    setIsServerDownError(false);
+    setIsServerDownError(false); // Reset server down error flag
     
     try {
       // Show submitting state
@@ -41,83 +48,76 @@ const FeedbackModal = ({ isOpen, onClose }) => {
       
       // First check if the server is online
       try {
-        const healthCheck = await fetch('https://knowindiaback.vercel.app/api/health', { 
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
+        // Skip the health check, go directly to feedback submission
+        console.log('Database connected, submitting feedback directly');
+        
+        const response = await fetch('https://knowindiaback.vercel.app/api/feedback', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(formData),
           mode: 'cors'
         });
-        
-        if (!healthCheck.ok) {
-          console.error('Server health check failed with status:', healthCheck.status);
-          throw new Error('Server appears to be experiencing issues. Your feedback has been saved locally.');
-        }
-        
-        const healthStatus = await healthCheck.json();
-        console.log('Server health check:', healthStatus);
-        
-        // Check if database connection is working
-        if (healthStatus && healthStatus.db_connection !== 'connected') {
-          console.log('Database connection is not available:', healthStatus.db_connection);
-          setIsServerDownError(true);
-          throw new Error('Our database is currently unavailable. Your feedback has been saved locally and will be sent when the service is restored.');
-        }
-      } catch (healthError) {
-        console.error('Server health check failed:', healthError);
-        setIsServerDownError(true);
-        throw new Error('We are experiencing temporary technical difficulties. Your feedback has been saved locally and will be sent later.');
-      }
 
-      const response = await fetch('https://knowindiaback.vercel.app/api/feedback', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-        mode: 'cors'
-      });
-
-      // Log the full response for debugging
-      console.log('Response status:', response.status);
-      
-      if (!response.ok) {
-        let errorMessage = `Error: ${response.status}`;
-        try {
-          const errorData = await response.json();
-          console.error('Server error response:', errorData);
-          errorMessage = errorData.error || errorMessage;
-          
-          // Check for database connection errors
-          if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('database')) {
-            setIsServerDownError(true);
-            throw new Error('Our database is temporarily unavailable. Your feedback has been saved locally and will be sent when the service is restored.');
+        // Log the full response for debugging
+        console.log('Response status:', response.status);
+        
+        if (!response.ok) {
+          let errorMessage = `Error: ${response.status}`;
+          try {
+            const errorData = await response.json();
+            console.error('Server error response:', errorData);
+            errorMessage = errorData.error || errorMessage;
+            
+            // Check for database connection errors
+            if (errorMessage.includes('ECONNREFUSED') || 
+                errorMessage.includes('database') || 
+                errorMessage.includes('Database') ||
+                errorMessage.includes('connection')) {
+              console.log('Database connection error detected in error message');
+              setIsServerDownError(true);
+              throw new Error('Our database is temporarily unavailable. Your feedback has been saved locally and will be sent when the service is restored.');
+            }
+          } catch (parseError) {
+            const errorText = await response.text();
+            console.error('Server error (text):', errorText);
           }
-        } catch (parseError) {
-          const errorText = await response.text();
-          console.error('Server error (text):', errorText);
+          throw new Error(`Failed to submit feedback: ${errorMessage}`);
         }
-        throw new Error(`Failed to submit feedback: ${errorMessage}`);
-      }
 
-      // Show success message
-      setIsSubmitted(true);
-      
-      // If we had a server down error but now it works, clear local storage
-      if (isServerDownError) {
-        localStorage.removeItem('pendingFeedback');
+        // Parse the response
+        const responseData = await response.json();
+        console.log('Submission response:', responseData);
+        
+        // Show success message
+        setIsSubmitted(true);
+        
+        // Reset form after 3 seconds and close modal
+        setTimeout(() => {
+          setIsSubmitted(false);
+          setFormData({
+            name: '',
+            email: '',
+            rating: 5,
+            feedback: '',
+            suggestions: ''
+          });
+          onClose();
+        }, 3000);
+      } catch (err) {
+        console.error('Error with feedback submission:', err);
+        
+        // Only set server down error if it's a connection issue
+        if (err.message.includes('database') || 
+            err.message.includes('Database') || 
+            err.message.includes('unavailable') ||
+            err.message.includes('saved locally')) {
+          setIsServerDownError(true);
+        }
+        
+        throw err; // Re-throw to be caught by the outer catch
       }
-      
-      // Reset form after 3 seconds and close modal
-      setTimeout(() => {
-        setIsSubmitted(false);
-        setFormData({
-          name: '',
-          email: '',
-          rating: 5,
-          feedback: '',
-          suggestions: ''
-        });
-        onClose();
-      }, 3000);
     } catch (error) {
       console.error('Error submitting feedback:', error);
       setErrorMessage(error.message);
@@ -125,6 +125,7 @@ const FeedbackModal = ({ isOpen, onClose }) => {
       // If this is a server down error, save the feedback to local storage for later submission
       if (isServerDownError) {
         try {
+          console.log('Storing feedback in local storage due to server/database issue');
           const pendingFeedback = JSON.parse(localStorage.getItem('pendingFeedback')) || [];
           pendingFeedback.push({
             ...formData,
@@ -312,6 +313,12 @@ const FeedbackModal = ({ isOpen, onClose }) => {
                             ? 'bg-gray-400 dark:bg-gray-600 cursor-not-allowed' 
                             : 'bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 dark:from-blue-500 dark:to-indigo-600 dark:hover:from-blue-600 dark:hover:to-indigo-700'
                         } text-white font-medium rounded-lg transition-colors`}
+                        onClick={(e) => {
+                          if (isSubmitting) {
+                            e.preventDefault(); // Prevent form submission if already submitting
+                            console.log('Form is already submitting, ignoring click');
+                          }
+                        }}
                       >
                         {isSubmitting ? 'Submitting...' : 'Submit Feedback'}
                       </button>

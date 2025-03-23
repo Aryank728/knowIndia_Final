@@ -27,7 +27,15 @@ let isConnected = false;
 async function connectToDatabase() {
   // If already connected, return the existing connection
   if (isConnected && db) {
-    return db;
+    try {
+      // Test the existing connection with a simple query
+      await db.execute('SELECT 1');
+      return db;
+    } catch (err) {
+      console.log('Existing connection failed, creating new connection');
+      isConnected = false;
+      // Continue to create a new connection
+    }
   }
   
   try {
@@ -78,6 +86,12 @@ async function connectToDatabase() {
             '/var/task/isrgrootx1.pem'
           ];
           
+          // Add CA_PATH from .env if it exists
+          if (process.env.CA_PATH) {
+            certLocations.unshift(process.env.CA_PATH);
+            console.log(`Added CA_PATH from .env: ${process.env.CA_PATH}`);
+          }
+          
           for (const certPath of certLocations) {
             if (fs.existsSync(certPath)) {
               ca = fs.readFileSync(certPath);
@@ -87,8 +101,9 @@ async function connectToDatabase() {
           }
           
           // If no file found, try environment variable
-          if (!ca && process.env.DB_CA_CERT) {
-            ca = Buffer.from(process.env.DB_CA_CERT, 'base64');
+          if (!ca && (process.env.DB_CA_CERT || process.env.CA_CERT)) {
+            const certBase64 = process.env.DB_CA_CERT || process.env.CA_CERT;
+            ca = Buffer.from(certBase64, 'base64');
             console.log('Using certificate from environment variable');
           }
         } catch (certError) {
@@ -115,6 +130,9 @@ async function connectToDatabase() {
         db = await method();
         console.log('Connection successful!');
         isConnected = true;
+        
+        // Verify connection with a test query
+        await db.execute('SELECT 1');
         
         // Create feedback table if it doesn't exist
         const createTableQuery = `
@@ -159,15 +177,83 @@ async function connectToDatabase() {
   }
 }
 
+// Add middleware to check database connection for specific endpoints
+const ensureDatabaseConnected = async (req, res, next) => {
+  // Skip for non-database endpoints
+  if (req.path.includes('-mock') || req.path === '/api/health' || req.path === '/api/debug' || req.path === '/api/test') {
+    return next();
+  }
+  
+  try {
+    // Simplified approach - just try to connect to the database
+    console.log('Middleware: checking database connection...');
+    const connection = await connectToDatabase();
+    console.log('Middleware: database connection successful');
+    next();
+  } catch (err) {
+    console.error('Database connection middleware failed:', err.message);
+    
+    // Make sure any pending feedback is stored locally by the client
+    return res.status(503).json({
+      error: 'Database connection unavailable',
+      message: 'The database is currently unavailable. Please try again later.',
+      details: err.message,
+      store_locally: true
+    });
+  }
+};
+
+// Apply the middleware to relevant routes
+app.use('/api/feedback', ensureDatabaseConnected);
+app.use('/api/db-test', ensureDatabaseConnected);
+
 // Health check endpoint - no database connection needed
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    message: 'Server is running',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-    db_connection: isConnected ? 'connected' : 'not connected'
-  });
+app.get('/api/health', async (req, res) => {
+  try {
+    // Try to connect to the database to get actual connection status
+    let dbStatus = 'not connected';
+    
+    if (isConnected && db) {
+      try {
+        // Test the existing connection with a simple query
+        await db.execute('SELECT 1');
+        dbStatus = 'connected';
+      } catch (err) {
+        console.error('Health check - existing connection failed:', err.message);
+        isConnected = false;
+        dbStatus = 'connection failed';
+      }
+    }
+    
+    if (!isConnected) {
+      try {
+        await connectToDatabase();
+        // If we get here, the connection was successful
+        isConnected = true;
+        dbStatus = 'connected';
+      } catch (err) {
+        console.error('Health check connection test failed:', err.message);
+        isConnected = false;
+        dbStatus = 'connection failed: ' + err.message;
+      }
+    }
+
+    res.status(200).json({
+      status: 'ok',
+      message: 'Server is running',
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development',
+      db_connection: dbStatus
+    });
+  } catch (err) {
+    console.error('Health check error:', err.message);
+    res.status(500).json({
+      status: 'error',
+      message: 'Health check error',
+      db_connection: 'unknown',
+      error: err.message
+    });
+  }
 });
 
 // Feedback submission endpoint
@@ -183,27 +269,52 @@ app.post('/api/feedback', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
-    // Connect to database
+    // Connect to database with extra verification
     console.log('Connecting to database...');
-    const connection = await connectToDatabase();
-    console.log('Database connection successful');
+    let connection;
+    try {
+      connection = await connectToDatabase();
+      // Verify connection is alive with a simple query
+      await connection.execute('SELECT 1');
+      console.log('Database connection verified');
+    } catch (dbErr) {
+      console.error('Database connection failed:', dbErr.message);
+      
+      // Return specific error for database issues
+      return res.status(500).json({ 
+        error: 'Database connection error: ' + dbErr.message,
+        suggestion: 'This is a server-side issue. Please try again later.'
+      });
+    }
     
-    const query = `
-      INSERT INTO Feedback (name, email, rating, liked_content, improvement_suggestions)
-      VALUES (?, ?, ?, ?, ?)
-    `;
-    
-    console.log('Executing database query...');
-    const [results] = await connection.execute(query, [name, email, rating, feedback, suggestions]);
-    console.log('Feedback stored successfully, ID:', results.insertId);
-    
-    // Return success response
-    res.status(201).json({ message: 'Feedback submitted successfully', id: results.insertId });
+    // Insert feedback into the database
+    try {
+      const query = `
+        INSERT INTO Feedback (name, email, rating, liked_content, improvement_suggestions)
+        VALUES (?, ?, ?, ?, ?)
+      `;
+      
+      console.log('Executing database query with parameters:', { name, email, rating });
+      const [results] = await connection.execute(query, [name, email, rating, feedback, suggestions]);
+      console.log('Feedback stored successfully, ID:', results.insertId);
+      
+      // Return success response
+      return res.status(201).json({ 
+        message: 'Feedback submitted successfully', 
+        id: results.insertId,
+        success: true
+      });
+    } catch (queryErr) {
+      console.error('Database query failed:', queryErr.message);
+      return res.status(500).json({ 
+        error: 'Failed to save feedback: ' + queryErr.message 
+      });
+    }
   } catch (err) {
     console.error('Error submitting feedback:', err.message);
     console.error('Error stack:', err.stack);
     
-    res.status(500).json({ error: 'Error submitting feedback: ' + err.message });
+    return res.status(500).json({ error: 'Error submitting feedback: ' + err.message });
   }
 });
 
@@ -211,6 +322,11 @@ app.post('/api/feedback', async (req, res) => {
 app.get('/api/db-test', async (req, res) => {
   try {
     console.log('Testing database connection...');
+    
+    // Force a new connection to ensure we're getting a fresh status
+    isConnected = false;
+    db = null;
+    
     const connection = await connectToDatabase();
     
     // Run a test query
@@ -222,16 +338,19 @@ app.get('/api/db-test', async (req, res) => {
       status: 'ok',
       message: 'Database connection successful',
       connected: true,
-      test_result: results
+      test_result: results,
+      timestamp: new Date().toISOString()
     });
   } catch (err) {
     console.error('Database test error:', err.message);
     console.error('Error stack:', err.stack);
     
-    res.status(500).json({
+    res.status(503).json({
       status: 'error',
       message: 'Failed to connect to database',
-      error: err.message
+      connected: false,
+      error: err.message,
+      timestamp: new Date().toISOString()
     });
   }
 });
@@ -254,12 +373,19 @@ app.get('/api/debug', (req, res) => {
       db_password: process.env.DB_PASSWORD ? 'set' : 'not set',
       db_database: process.env.DB_DATABASE ? 'set' : 'not set',
       db_ssl: process.env.DB_SSL ? 'set' : 'not set',
-      db_ca_cert: process.env.DB_CA_CERT ? 'set' : 'not set'
+      db_ca_cert: process.env.DB_CA_CERT ? 'set' : 'not set',
+      ca_path: process.env.CA_PATH ? 'set' : 'not set'
     },
     certificate_search: {
       certs_dir_exists: fs.existsSync(path.join(__dirname, 'certs')),
       root_cert_exists: fs.existsSync(path.join(__dirname, 'isrgrootx1.pem')),
       certs_dir_cert_exists: fs.existsSync(path.join(__dirname, 'certs', 'isrgrootx1.pem'))
+    },
+    db_connection_status: isConnected ? 'connected' : 'not connected',
+    database_info: {
+      host: process.env.DB_HOST ? process.env.DB_HOST : 'not set',
+      port: process.env.DB_PORT ? process.env.DB_PORT : 'not set',
+      database: process.env.DB_DATABASE ? process.env.DB_DATABASE : 'not set'
     },
     headers: req.headers,
     dir_contents: fs.existsSync(__dirname) ? fs.readdirSync(__dirname) : 'unavailable'
@@ -397,6 +523,17 @@ app.get('/api/feedback-mock/:id', (req, res) => {
 
 // For local development
 if (process.env.NODE_ENV !== 'production') {
+  // Initialize database connection on startup
+  (async () => {
+    try {
+      console.log('Initializing database connection on startup...');
+      await connectToDatabase();
+      console.log('Database initialized successfully!');
+    } catch (err) {
+      console.error('Failed to initialize database on startup:', err.message);
+    }
+  })();
+
   app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
   });

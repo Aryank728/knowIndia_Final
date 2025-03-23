@@ -21,12 +21,43 @@ The backend provides several APIs for the application:
 
 For testing and development, the following endpoints are available that don't require a database connection:
 
-- `GET /api/debug` - Get debugging information about the server environment
-- `POST /api/feedback-mock` - Submit mock feedback (stored in the file system)
-- `GET /api/feedback-mock` - Get all mock feedback entries
-- `GET /api/feedback-mock/:id` - Get a specific mock feedback entry
+#### Debug Endpoint - `GET /api/debug`
 
-For detailed documentation about these test endpoints, see [TEST_ENDPOINTS.md](backend/TEST_ENDPOINTS.md).
+Returns debugging information about the server environment, including:
+- Timestamp and environment
+- Node.js version
+- Status of environment variables
+- File system checks for certificates
+- Request headers
+- Directory contents
+
+#### Mock Feedback Endpoints
+
+These endpoints provide a way to test the feedback functionality without requiring a database connection. All data is stored in JSON files on the server's file system.
+
+1. **Submit Mock Feedback - `POST /api/feedback-mock`**
+   ```json
+   // Request Body
+   {
+     "name": "Test User",
+     "email": "test@example.com",
+     "rating": 5,
+     "feedback": "This is a test feedback",
+     "suggestions": "This is a test suggestion"
+   }
+   ```
+
+2. **Get All Mock Feedbacks - `GET /api/feedback-mock`**
+   Returns a list of all mock feedback submissions.
+
+3. **Get Specific Mock Feedback - `GET /api/feedback-mock/:id`**
+   Returns a specific feedback submission by ID.
+
+These test endpoints are particularly useful for:
+- Testing the application when the database is unavailable
+- Testing the frontend without modifying the actual database
+- Debugging server deployment issues
+- Verifying that the server is running correctly
 
 ## Development
 
@@ -71,13 +102,36 @@ For detailed documentation about these test endpoints, see [TEST_ENDPOINTS.md](b
 
 ## Deployment
 
-For information on deploying to Vercel, see [DEPLOYMENT.md](backend/DEPLOYMENT.md).
+The application is configured for deployment on Vercel. Key considerations:
 
-For SSL certificate setup with TiDB Cloud, see [CERTIFICATE_SETUP.md](backend/CERTIFICATE_SETUP.md).
+### Environment Variables
 
-## Troubleshooting
+Ensure the following environment variables are set in your Vercel deployment:
+- `DB_HOST` - Database hostname
+- `DB_PORT` - Database port
+- `DB_USERNAME` - Database username
+- `DB_PASSWORD` - Database password
+- `DB_DATABASE` - Database name
+- `DB_CA_CERT` - Base64 encoded SSL certificate (if needed)
 
-If you encounter issues with the database connection in production, you can use the test endpoints to verify that the server is running correctly.
+### SSL Certificate Setup
+
+For secure connections to TiDB Cloud or other SSL-enabled databases:
+
+1. The certificate file (`isrgrootx1.pem`) is included in the `backend/certs` directory
+2. During deployment, the certificate is automatically included
+3. The server attempts multiple connection methods if one fails:
+   - Simple connection without SSL (for local development)
+   - Connection with relaxed SSL settings
+   - Full certificate-based connection
+
+### Troubleshooting
+
+If you encounter database connection issues:
+1. Use the `/api/debug` endpoint to check environment variables and certificate status
+2. Verify that the certificate file exists in the deployed environment
+3. Try the mock feedback endpoints to verify basic server functionality
+4. Check the server logs for specific error messages
 
 ## Contributing
 

@@ -21,7 +21,7 @@ const Navbar = () => {
     }, []);
 
     const navItems = [
-        { name: "Home", path: "/", icon: <Home size={18} className="mr-1" /> },
+        { name: "Home", path: "/places", icon: <Home size={18} className="mr-1" /> },
         { name: "Constitution", path: "/constitution", icon: <Book size={18} className="mr-1" /> },
         { name: "About Us", path: "/aboutus", icon: <Users size={18} className="mr-1" /> },
         { name: "Contact Us", path: "/contactus", icon: <Phone size={18} className="mr-1" /> }
@@ -41,7 +41,7 @@ const Navbar = () => {
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.5 }}
                     >
-                        <Link to="/">
+                        <Link to="/places">
                             <img src={logo} alt="Logo" className="h-12 w-auto" />
                         </Link>
                     </motion.div>

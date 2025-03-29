@@ -239,7 +239,7 @@ const ContactUs = () => {
                         className="h-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 mx-auto mb-8 max-w-md"
                     ></motion.div>
                     <motion.p
-                        className="text-lg md:text-xl text-gray-700 max-w-3xl mx-auto relative z-10"
+                        className="text-lg md:text-xl text-gray-700 dark:text-gray-200 max-w-3xl mx-auto relative z-10"
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.5, duration: 0.8 }}

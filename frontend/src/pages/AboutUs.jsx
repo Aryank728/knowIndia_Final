@@ -174,7 +174,7 @@ const AboutUs = () => {
                         className="h-1 bg-gradient-to-r from-blue-600 to-purple-600 mx-auto mb-8 max-w-md"
                     ></motion.div>
                     <motion.p 
-                        className="text-lg text-gray-700 max-w-3xl mx-auto relative z-10"
+                        className="text-lg text-gray-700 dark:text-gray-200 max-w-3xl mx-auto relative z-10"
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.5, duration: 0.8 }}
@@ -196,7 +196,7 @@ const AboutUs = () => {
                             key={member.id}
                             variants={itemVariants}
                             whileHover={{ y: -10, transition: { duration: 0.3 } }}
-                            className="bg-white/80 backdrop-blur-sm rounded-xl overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 border border-gray-100"
+                            className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 border border-gray-100 dark:border-gray-700"
                         >
                             <div className="flex flex-col md:flex-row">
                                 <div className="md:w-2/5 overflow-hidden">
@@ -216,16 +216,16 @@ const AboutUs = () => {
                                     </motion.div>
                                 </div>
                                 <div className="md:w-3/5 p-6">
-                                    <h3 className="text-2xl font-bold text-gray-800 mb-2">{member.name}</h3>
-                                    <p className="text-blue-600 font-medium mb-4">{member.role}</p>
-                                    <p className="text-gray-600 mb-6">{member.bio}</p>
+                                    <h3 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-2">{member.name}</h3>
+                                    <p className="text-blue-600 dark:text-blue-400 font-medium mb-4">{member.role}</p>
+                                    <p className="text-gray-600 dark:text-gray-300 mb-6">{member.bio}</p>
                                     <div className="flex space-x-4">
                                         <motion.a
                                             whileHover={{ y: -5, color: "#0077B5" }}
                                             href={member.social.linkedin}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="text-gray-600 hover:text-blue-600 transition-colors"
+                                            className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                                         >
                                             <FaLinkedin size={24} />
                                         </motion.a>
@@ -234,14 +234,14 @@ const AboutUs = () => {
                                             href={member.social.github}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="text-gray-600 hover:text-gray-900 transition-colors"
+                                            className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
                                         >
                                             <FaGithub size={24} />
                                         </motion.a>
                                         <motion.a
                                             whileHover={{ y: -5, color: "#EA4335" }}
                                             href={member.social.email}
-                                            className="text-gray-600 hover:text-red-500 transition-colors"
+                                            className="text-gray-600 dark:text-gray-300 hover:text-red-500 dark:hover:text-red-300 transition-colors"
                                         >
                                             <FaEnvelope size={24} />
                                         </motion.a>
@@ -250,7 +250,7 @@ const AboutUs = () => {
                                             href={member.social.portfolio}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="text-gray-600 hover:text-blue-500 transition-colors"
+                                            className="text-gray-600 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-300 transition-colors"
                                         >
                                             <FaGlobe size={24} />
                                         </motion.a>
@@ -267,10 +267,10 @@ const AboutUs = () => {
                     whileInView={{ opacity: 1 }}
                     transition={{ duration: 1 }}
                     viewport={{ once: true }}
-                    className="mt-24 bg-white/70 backdrop-blur-sm p-8 md:p-12 rounded-2xl shadow-lg border border-gray-100 relative z-10"
+                    className="mt-24 bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm p-8 md:p-12 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 relative z-10"
                 >
                     <motion.div 
-                        className="absolute -top-10 -left-10 w-40 h-40 rounded-full bg-blue-100/50 blur-2xl -z-10"
+                        className="absolute -top-10 -left-10 w-40 h-40 rounded-full bg-blue-100/50 dark:bg-blue-900/20 blur-2xl -z-10"
                         animate={{ 
                             scale: [1, 1.2, 1],
                             opacity: [0.5, 0.8, 0.5]
@@ -282,7 +282,7 @@ const AboutUs = () => {
                         }}
                     />
                     <motion.div 
-                        className="absolute -bottom-10 -right-10 w-40 h-40 rounded-full bg-purple-100/50 blur-2xl -z-10"
+                        className="absolute -bottom-10 -right-10 w-40 h-40 rounded-full bg-purple-100/50 dark:bg-purple-900/20 blur-2xl -z-10"
                         animate={{ 
                             scale: [1, 1.2, 1],
                             opacity: [0.5, 0.8, 0.5]
@@ -302,7 +302,7 @@ const AboutUs = () => {
                             whileInView={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.2, duration: 0.8 }}
                             viewport={{ once: true }}
-                            className="text-gray-700 mb-6"
+                            className="text-gray-700 dark:text-gray-200 mb-6"
                         >
                             The "Know India" project was born from our shared passion for India's diverse culture and rich heritage.
                             As software engineers with roots in different parts of India, we wanted to create a platform that showcases
@@ -313,7 +313,7 @@ const AboutUs = () => {
                             whileInView={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.4, duration: 0.8 }}
                             viewport={{ once: true }}
-                            className="text-gray-700 mb-6"
+                            className="text-gray-700 dark:text-gray-200 mb-6"
                         >
                             Our journey began when we realized that many people, including Indians themselves, are unaware of the
                             incredible diversity and cultural richness that exists across different states of India. We decided to 
@@ -324,7 +324,7 @@ const AboutUs = () => {
                             whileInView={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.6, duration: 0.8 }}
                             viewport={{ once: true }}
-                            className="text-gray-700"
+                            className="text-gray-700 dark:text-gray-200"
                         >
                             Today, we continue to expand and improve this platform, adding more detailed information about each state, 
                             its traditions, cuisines, festivals, and landmarks. We hope that through this project, we can inspire 

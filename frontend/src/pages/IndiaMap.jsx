@@ -7,48 +7,6 @@ import { useTheme } from "../context/ThemeContext";
 import { states as knowIndiaStates, uts as knowIndiaUTs } from 'knowindia';
 import { convertMapCodeToKnowIndia } from "../utils/stateCodeMapping";
 
-
- // Original states list as fallback
- const states = {
-  'AN': 'Andaman and Nicobar Islands',
-  'AP': 'Andhra Pradesh',
-  'AR': 'Arunachal Pradesh',
-  'AS': 'Assam',
-  'BR': 'Bihar',
-  'CH': 'Chandigarh',
-  'CT': 'Chhattisgarh',
-  'DD': 'Dadra and Nagar Haveli',
-  'DL': 'Delhi',
-  'DN': 'Daman and Diu',
-  'GA': 'Goa',
-  'GJ': 'Gujarat',
-  'HP': 'Himachal Pradesh',
-  'HR': 'Haryana',
-  'JH': 'Jharkhand',
-  'JK': 'Jammu and Kashmir',
-  'KA': 'Karnataka',
-  'KL': 'Kerala',
-  'LA': 'Ladakh',
-  'LD': 'Lakshadweep',
-  'MH': 'Maharashtra',
-  'ML': 'Meghalaya',
-  'MN': 'Manipur',
-  'MP': 'Madhya Pradesh',
-  'MZ': 'Mizoram',
-  'NL': 'Nagaland',
-  'OR': 'Odisha',
-  'PB': 'Punjab',
-  'PY': 'Puducherry',
-  'RJ': 'Rajasthan',
-  'SK': 'Sikkim',
-  'TG': 'Telangana',
-  'TN': 'Tamil Nadu',
-  'TR': 'Tripura',
-  'UP': 'Uttar Pradesh',
-  'UT': 'Uttarakhand',
-  'WB': 'West Bengal'
-};
-
 const IndiaMapComponent = () => {
   const [selectedState, setSelectedState] = useState("");
   const [statesList, setStatesList] = useState({});
@@ -58,41 +16,62 @@ const IndiaMapComponent = () => {
 
   // Initialize states list from knowindia package
   useEffect(() => {
-    try {
-      const allStates = knowIndiaStates();
-      const allUTs = knowIndiaUTs();
-      
-      // Create a combined list of states and UTs
-      const combinedList = {};
-      
-      // Add states
-      for (const code in allStates) {
-        combinedList[code] = allStates[code].name;
-      }
-      
-      // Add UTs
-      for (const code in allUTs) {
-        combinedList[code] = allUTs[code].name;
-      }
-      
-      // Add any missing states from our original list that might be needed for the map
-      for (const code in states) {
-        if (!combinedList[code]) {
-          combinedList[code] = states[code];
-          console.log(`Added missing state/UT from original list: ${code} - ${states[code]}`);
+    const fetchStates = async () => {
+      try {
+        const response = await fetch('https://knowindiaback.vercel.app/api/states');
+        if (!response.ok) {
+          throw new Error('Failed to fetch states data');
         }
+        const data = await response.json();
+        setStatesList(data);
+      } catch (error) {
+        console.error('Error fetching states:', error);
       }
-      
-      console.log("Combined states and UTs list:", combinedList);
-      setStatesList(combinedList);
-      
-    } catch (error) {
-      console.error("Error initializing states list:", error);
-      // Fallback to original states list
-      setStatesList(states);
-    }
-  }, []);
+    };
 
+    fetchStates();
+  }, []); // Empty dependency array since we only want to fetch once on mount
+
+  // Original states list as fallback
+  const states = {
+    'AN': 'Andaman and Nicobar Islands',
+    'AP': 'Andhra Pradesh',
+    'AR': 'Arunachal Pradesh',
+    'AS': 'Assam',
+    'BR': 'Bihar',
+    'CH': 'Chandigarh',
+    'CT': 'Chhattisgarh',
+    'DD': 'Dadra and Nagar Haveli',
+    'DL': 'Delhi',
+    'DN': 'Daman and Diu',
+    'GA': 'Goa',
+    'GJ': 'Gujarat',
+    'HP': 'Himachal Pradesh',
+    'HR': 'Haryana',
+    'JH': 'Jharkhand',
+    'JK': 'Jammu and Kashmir',
+    'KA': 'Karnataka',
+    'KL': 'Kerala',
+    'LA': 'Ladakh',
+    'LD': 'Lakshadweep',
+    'MH': 'Maharashtra',
+    'ML': 'Meghalaya',
+    'MN': 'Manipur',
+    'MP': 'Madhya Pradesh',
+    'MZ': 'Mizoram',
+    'NL': 'Nagaland',
+    'OR': 'Odisha',
+    'PB': 'Punjab',
+    'PY': 'Puducherry',
+    'RJ': 'Rajasthan',
+    'SK': 'Sikkim',
+    'TG': 'Telangana',
+    'TN': 'Tamil Nadu',
+    'TR': 'Tripura',
+    'UP': 'Uttar Pradesh',
+    'UT': 'Uttarakhand',
+    'WB': 'West Bengal'
+  };
 
   const handleClick = (stateCode) => {
     console.log("IndiaMap - stateCode clicked:", stateCode);

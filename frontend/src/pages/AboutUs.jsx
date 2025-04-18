@@ -24,7 +24,7 @@ const AboutUs = () => {
         {
             id: 1,
             name: "Brajesh Jha",
-            role: "Software Engineer at Value Momentum",
+            role: "Software Engineer",
             bio: "Passionate software engineer with expertise in building scalable applications. Specializes in full stack development and Python applications.",
             image: Brajesh,
             social: {
@@ -37,7 +37,7 @@ const AboutUs = () => {
         {
             id: 2,
             name: "Aryan Kumar",
-            role: "Software Engineer at LTIMindtree",
+            role: "Software Engineer",
             bio: "Full-stack developer with a focus on creating intuitive user experiences. Passionate about modern web technologies and Cloud Computing.",
             image: Aryan,
             social: {
